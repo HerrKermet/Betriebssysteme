@@ -1,0 +1,43 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+//compare function for the qsort algorithm
+int compareStr(const void* a, const void* b){
+	char* pa = *(char**) a;
+	char* pb = *(char**) b;
+	
+	return strcmp(pa, pb);
+}
+
+int main(int argc, char **argv) {
+	int MAX_LENGTH = 100;
+	
+	char** lines = NULL;
+	char buffer[MAX_LENGTH];
+	
+	int counter = 0;
+
+	while(fgets(buffer, MAX_LENGTH, stdin) != NULL) {
+		counter++;
+		//reallocate memory to store right amount of char*
+		lines = realloc(lines, counter * sizeof(char*));
+		//allocate memory for the new string + 1 for the \0 
+		lines[counter - 1] = malloc(sizeof(char) * MAX_LENGTH + 1);
+		
+		// copy every char from buffer to its corresponding lines region
+		strcpy(lines[counter - 1], buffer);
+	}
+	
+	// sort lines array
+	qsort(lines, counter, sizeof(char*), compareStr);
+	
+	//print and free each line
+	for(int i = 0; i < counter; i++){
+		printf("%s", lines[i]);
+		free(lines[i]);
+	}
+	free(lines);
+	
+	return 0;
+}
