@@ -127,7 +127,7 @@ void free (void *ptr) {
 	//get corresponding mblock
 	struct mblock* mbp = (struct mblock*) (((char*)ptr) - sizeof(struct mblock));
 	
-	//make sure that mbp->next is the MAGIC
+	//make sure that mbp->next is MAGIC
 	if(mbp->next != MAGIC)
 		return;
 	
