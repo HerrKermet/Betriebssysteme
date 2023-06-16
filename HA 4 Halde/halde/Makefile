@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -std=c11 -pedantic -Wall -Werror -D_XOPEN_SOURCE=700 -c
+DBGFLAGS = -g -ggdb -O0
 
 test: test.o halde.o
 	$(CC) -o test test.o halde.o
@@ -11,7 +12,7 @@ halde-debug: halde-debug.o
 	$(CC) -o halde-debug halde-debug.o
     
 halde-debug.o: halde.c
-	$(CC) $(CFLAGS) -g -O0 -o halde-debug.o halde.c
+	$(CC) $(DBGFLAGS) -o halde-debug.o halde.c
 
 test.o: test.c
 	$(CC) $(CFLAGS) test.c

@@ -72,6 +72,7 @@ void *malloc (size_t size) {
 			
 			//find suitable free space or go to last free space if there is none
 			struct mblock* currMblock = head;
+			struct mblock* prevMblock = head;
 			while(currMblock->next != NULL){
 				//check if current mblock has enough space
 				if(currMblock->size >= (size + sizeof(struct mblock))){
@@ -93,12 +94,53 @@ void *malloc (size_t size) {
 				}
 				else{
 					//Not enough space so shift to next mblock
+					prevMblock = currMblock;
 					currMblock = currMblock->next;
+				}
+			}
+			//currMblock reached end of linked list
+			if(currMblock->size >= size){
+				// we have enough space for the requested size
+				// but do we have enough to add a struct too?
+				if(currMblock->size >= size + sizeof(struct mblock))
+				{
+					//add size and new struct
+					void* ptr;
+					//init newMblock and put it after the requested memory
+					struct mblock* newMblock = (struct mblock*) ((char*) currMblock + sizeof(struct mblock) + size);
+					newMblock->next = NULL;
+					newMblock->size = currMblock->size - size - sizeof(struct mblock);
+					
+					currMblock->next = MAGIC;
+					currMblock->size = size;
+					
+					//adjust previous block->next of linked list
+					prevMblock->next = newMblock;
+					
+					ptr = (char*) currMblock + sizeof(struct mblock);
+					return ptr;
+									
+				}
+				else
+				{
+					//only enough space for the size
+					void* ptr;
+					
+					currMblock->next = MAGIC;
+					// dont change size because we have no struct after it (just giving some more space couldnt hurt here)
+					
+					//adjust previous block of linked list to be the last block
+					prevMblock->next = NULL;
+					
+					// return the pointer
+					ptr = (char*) currMblock + sizeof(struct mblock);
+					return ptr;
+					
 				}
 			}
 		}
 		//case head->next is null
-		if(head->next == NULL){
+		if(head->next == NULL && head->size >= size + sizeof(struct mblock)){
 			//make new mblock right after the allocated space
 			struct mblock* newMblock = (struct mblock*)(((char*) head) + size + sizeof(struct mblock));
 			
@@ -147,28 +189,28 @@ void *calloc (size_t nmemb, size_t size) {
 	return NULL;
 }
 
-int main(int argc, char** argv){
-	printList();
+//int main(int argc, char** argv){
+	//printList();
 
-	char *m1 = malloc(16);
-	printList();
+	//char *m1 = malloc(16);
+	//printList();
 	
-	char* m2 = malloc(48);
-	printList();
+	//char* m2 = malloc(48);
+	//printList();
 
-	free(m1);
-	printList();
+	//free(m1);
+	//printList();
 	
-	char* m3 = malloc(80);
-	printList();
+	//char* m3 = malloc(80);
+	//printList();
 	
-	//free(m2);
-	printList();
+	////free(m2);
+	//printList();
 	
-	//free(m3);
-	printList();
+	////free(m3);
+	//printList();
 	
-	printf("printing unused stuff %p %p\n", m2, m3);
+	//printf("printing unused stuff %p %p\n", m2, m3);
 	
-	return 0;
-}
+	//return 0;
+//}
