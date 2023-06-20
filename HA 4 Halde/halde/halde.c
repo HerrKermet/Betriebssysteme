@@ -56,108 +56,111 @@ void printList(void) {
 }
 
 void *malloc (size_t size) {
-	// TODO: implement me!
-	if(head == NULL){
-		//Initialize head
+	//case head is NULL therefore not initialized
+	if(head == NULL)
+	{
+		//create new struct and init it
 		head = (struct mblock*) memory;
 		head->next = NULL;
-		head->size = SIZE - sizeof(struct mblock);
+		head->size = SIZE- sizeof(struct mblock);
 	}
 	
-	//check if there is enough space
-	if(1){
-		//case head->next is not null (can only be null or a pointer)
-		if(head->next != NULL && head->next != MAGIC){
-			//head->next points to the next free mblock with size of head->next->size (only if next is not the MAGIC)
-			
-			//find suitable free space or go to last free space if there is none
-			struct mblock* currMblock = head;
-			struct mblock* prevMblock = head;
-			while(currMblock->next != NULL){
-				//check if current mblock has enough space
-				if(currMblock->size >= (size + sizeof(struct mblock))){
-					//get pointer to return
-					void* ptr = ((char*) currMblock) + sizeof(struct mblock);
-					
-					//create new mblock after the occupied space
-					struct mblock* newMblock = (struct mblock*) ((char*) currMblock + size + sizeof(struct mblock));
-					newMblock->size = currMblock->size - size - sizeof(struct mblock);
-					newMblock->next = currMblock->next;
-					
-					//shift head and adjust current struct
-					currMblock->size = size;
-					head = currMblock->next;
-					currMblock->next = MAGIC;
-					
-					
-					return ptr;
+	//check if there is enoug space and if so then return ptr
+	//iterate over the linked list till NULL is found or a suitable memory block
+	
+	//declare iterator
+	struct mblock* currMblock = head;
+	struct mblock* prevMblock = head;
+	
+	//while not at the end of the list do ..
+	while(currMblock->next != NULL){
+		//check if current mblock has enough space
+		if(currMblock->size >= size){
+			//check if only space for the size or space for size and a new mblock
+			if(currMblock->size >= (sizeof(struct mblock) + size))
+			{
+				//enough space for both
+				
+				//init new block
+				struct mblock* newMblock =(struct mblock*) ((char*) currMblock + sizeof(struct mblock) + size);
+				newMblock->size = currMblock->size - size - sizeof(struct mblock);
+				newMblock->next = currMblock->next;
+				
+				currMblock->next = MAGIC;
+				currMblock->size = size;
+				
+				//check if the element was the first of the list  (so it does not have a prev block)
+				if(prevMblock == head)
+				{
+					head = newMblock;
 				}
 				else{
-					//Not enough space so shift to next mblock
-					prevMblock = currMblock;
-					currMblock = currMblock->next;
-				}
-			}
-			//currMblock reached end of linked list
-			if(currMblock->size >= size){
-				// we have enough space for the requested size
-				// but do we have enough to add a struct too?
-				if(currMblock->size >= size + sizeof(struct mblock))
-				{
-					//add size and new struct
-					void* ptr;
-					//init newMblock and put it after the requested memory
-					struct mblock* newMblock = (struct mblock*) ((char*) currMblock + sizeof(struct mblock) + size);
-					newMblock->next = NULL;
-					newMblock->size = currMblock->size - size - sizeof(struct mblock);
-					
-					currMblock->next = MAGIC;
-					currMblock->size = size;
-					
-					//adjust previous block->next of linked list
 					prevMblock->next = newMblock;
-					
-					ptr = (char*) currMblock + sizeof(struct mblock);
-					return ptr;
-									
 				}
+				
+				void* toReturn = currMblock + 1;
+				return toReturn;				
+				
+			}
+			else{
+				// only enough space for the size so we will give the whole mblock (mblock->size can only exceed size by 15 bytes which shouldnt be the problem)
+				if(prevMblock == head)
+					head = currMblock->next;
 				else
-				{
-					//only enough space for the size
-					void* ptr;
-					
-					currMblock->next = MAGIC;
-					// dont change size because we have no struct after it (just giving some more space couldnt hurt here)
-					
-					//adjust previous block of linked list to be the last block
-					prevMblock->next = NULL;
-					
-					// return the pointer
-					ptr = (char*) currMblock + sizeof(struct mblock);
-					return ptr;
-					
-				}
+					prevMblock->next = currMblock->next;
+				
+				//adjust currMblock but DONT ALTER SIZE because we need to know the actual size and not the requested size in this context
+				currMblock->next = MAGIC;
+				
+				void* toReturn = currMblock + 1;
+				return toReturn;
 			}
 		}
-		//case head->next is null
-		if(head->next == NULL && head->size >= size + sizeof(struct mblock)){
-			//make new mblock right after the allocated space
-			struct mblock* newMblock = (struct mblock*)(((char*) head) + size + sizeof(struct mblock));
+		prevMblock = currMblock;
+		currMblock = currMblock->next;
+	}
+	
+	//we iterated through the whole list and didnt found any matching space so check list end here
+	if(currMblock->next == NULL){
+		//same cases here  enough space for size and struct or only for size
+		
+		if(currMblock->size >= size){
+			if(currMblock->size >= (sizeof(struct mblock) + size)){
+				//init new block
+				struct mblock* newMblock = (struct mblock*) ((char*) currMblock + sizeof(struct mblock) + size);
+				newMblock->size = currMblock->size - sizeof(struct mblock) - size;
+				newMblock->next = NULL;
+				
+				//adjust current block
+				currMblock->next = MAGIC;
+				currMblock->size = size;
+				
+				if(prevMblock == head){
+					head = newMblock;
+				}
+				else
+					prevMblock->next = newMblock;
+				
+				
+				//return address
+				void* toReturn = currMblock + 1;
+				return toReturn;
+			}
+			else{
+				// only enough space for the size so we will give the whole mblock (mblock->size can only exceed size by 15 bytes which shouldnt be the problem)
+				if(prevMblock == head)
+					head = currMblock->next;
+				else
+					prevMblock->next = currMblock->next;
+				
+				//adjust currMblock but DONT ALTER SIZE because we need to know the actual size and not the requested size in this context
+				currMblock->next = MAGIC;
+				
+				void* toReturn = currMblock + 1;
+				return toReturn;
+				
+			}
 			
-			//get reference to return pointer with requested size
-			void* ptr = (void*)(((char*) head) + sizeof(struct mblock));
-			
-			//init new mblock
-			newMblock->next = NULL;
-			newMblock->size = head->size - size - sizeof(struct mblock);
-			
-			//adjust head mblock
-			head->size = size;
-			head->next = MAGIC;
-			
-			//shift head
-			head = newMblock;
-			return ptr;			
 		}
 	}
 	return NULL;
@@ -190,27 +193,75 @@ void *calloc (size_t nmemb, size_t size) {
 }
 
 //int main(int argc, char** argv){
-	//printList();
+    //printList();
+    //printf("%d\n",1);
+    
 
-	//char *m1 = malloc(16);
-	//printList();
-	
-	//char* m2 = malloc(48);
-	//printList();
+    //char *m1 = malloc(16);
+    //printList();
+    //printf("%d\n",2);
+    
+    //char* m2 = malloc(48);
+    //printList();
+    //printf("%d\n",3);
+    
+    //char* m3 = malloc(80);
+    //printList();
+    //printf("%d\n",4);
+    
+    //char* m4 = malloc(16);
+    //printList();    
+    //printf("%d\n",4);
 
-	//free(m1);
-	//printList();
-	
-	//char* m3 = malloc(80);
-	//printList();
-	
-	////free(m2);
-	//printList();
-	
-	////free(m3);
-	//printList();
-	
-	//printf("printing unused stuff %p %p\n", m2, m3);
+    //free(m1);
+    //printList();
+    //printf("%d\n",5);
+    
+    
+    //free(m2);
+    //printList();
+    //printf("%d\n",6);
+    
+    //free(m3);
+    //printList();
+    //printf("%d\n",7);
+    
+    //free(m4);
+    //printList();
+    //printf("%d\n",8);
+    
+    //m1 = malloc(1024);
+    //printList();
+    //printf("%d\n",9);
+    
+    //m2 = malloc(16);
+    //printList();
+    //printf("%d\n",10);
+    
+    //m3 = malloc(47);
+    //printList();
+    //printf("%d\n",11);
+    
+    //m4 = malloc(64);
+    //printList(); 
+    //printf("%d\n",12); 
+    
+    //free(m1);
+    //printList();
+    //printf("%d\n",13);
+    
+    
+    //free(m2);
+    //printList();
+    //printf("%d\n",14);
+    
+    //free(m3);
+    //printList();
+    //printf("%d\n",15);
+    
+    //free(m4);
+    //printList();
+    //printf("%d\n",16);
 	
 	//return 0;
 //}
