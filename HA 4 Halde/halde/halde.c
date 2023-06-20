@@ -65,6 +65,16 @@ void *malloc (size_t size) {
 		head->size = SIZE- sizeof(struct mblock);
 	}
 	
+	if(size == 0){
+		return NULL;
+	}
+	
+	//TESTFALL  wenn size größer als memory ist
+	if(size > SIZE - sizeof(struct mblock))
+	{
+		return NULL;
+	}
+	
 	//check if there is enoug space and if so then return ptr
 	//iterate over the linked list till NULL is found or a suitable memory block
 	
@@ -167,8 +177,8 @@ void *malloc (size_t size) {
 }
 
 void free (void *ptr) {
-	// TODO: implement me!
-	
+	if(ptr == NULL)
+		return;
 	//get corresponding mblock
 	struct mblock* mbp = (struct mblock*) (((char*)ptr) - sizeof(struct mblock));
 	
@@ -183,14 +193,56 @@ void free (void *ptr) {
 }
 
 void *realloc (void *ptr, size_t size) {
-	// TODO: implement me!
+	if(ptr == NULL){
+		return malloc(size);
+	}
+	else if(size == 0)
+	{
+		//free pointer
+		free(ptr);
+	}
+	
+	//use memcpy to copy data
+	//get ptr for new address
+	void* dest = malloc(size);
+	void* result = memcpy(dest, ptr, size);
+	if(result == NULL){
+		//memcpy failed so we set errno and return null
+		free(dest);
+		errno = ENOMEM;
+		return NULL;
+	}
+	else
+	{
+		//memcpy succeeded so we return address
+		free(ptr);
+		return dest;	
+	}
+	
+	
 	return NULL;
 }
 
 void *calloc (size_t nmemb, size_t size) {
 	// TODO: implement me!
-	return NULL;
+	if(nmemb == 0 || size == 0){
+		return NULL; // there is nothing to initialize
+	}
+	size_t totalSize = nmemb * size;
+	
+	void* toReturn = malloc(totalSize);
+	
+	if(toReturn != NULL){
+		//init memory
+		memset(toReturn, 0, totalSize);
+	}
+	return toReturn;
 }
+
+
+
+//Main function only for debugging
+
 
 //int main(int argc, char** argv){
     //printList();

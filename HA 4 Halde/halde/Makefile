@@ -2,6 +2,8 @@ CC = gcc
 CFLAGS = -std=c11 -pedantic -Wall -Werror -D_XOPEN_SOURCE=700 -c
 DBGFLAGS = -g -ggdb -O0
 
+.PHONY: clean
+
 test: test.o halde.o
 	$(CC) -o test test.o halde.o
     
@@ -21,4 +23,4 @@ halde.o: halde.c
 	$(CC) $(CFLAGS) halde.c
     
 clean:
-	rm -f halde.o test.o test test-ref halde-debug halde-debug.o
+	rm -f test test-ref *.0

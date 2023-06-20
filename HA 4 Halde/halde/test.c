@@ -6,74 +6,70 @@
 
 int main(int argc, char *argv[]) {
     printList();
-    printf("%d\n",1);
     
-
+	//allocate 4 different sized pointer
     char *m1 = malloc(16);
     printList();
-    printf("%d\n",2);
     
     char* m2 = malloc(48);
     printList();
-    printf("%d\n",3);
     
     char* m3 = malloc(80);
     printList();
-    printf("%d\n",4);
     
     char* m4 = malloc(16);
     printList();    
-    printf("%d\n",4);
 
+	//free mentioned pointer
     free(m1);
     printList();
-    printf("%d\n",5);
     
     
     free(m2);
     printList();
-    printf("%d\n",6);
     
     free(m3);
     printList();
-    printf("%d\n",7);
     
     free(m4);
     printList();
-    printf("%d\n",8);
     
+    //allocate ptr with enough size to check each case:
+    // 1: no free struct has enough space
     m1 = malloc(1024);
     printList();
-    printf("%d\n",9);
-    
+    // 2: struct has exactly enough space
     m2 = malloc(16);
     printList();
-    printf("%d\n",10);
-    
+    // 3: struct has enough space but not enough for a new struct
     m3 = malloc(47);
     printList();
-    printf("%d\n",11);
-    
+    // 4: struct has enough space for struct and size
     m4 = malloc(64);
     printList(); 
-    printf("%d\n",12); 
     
+    
+    //free each ptr
     free(m1);
     printList();
-    printf("%d\n",13);
     
     
     free(m2);
     printList();
-    printf("%d\n",14);
     
     free(m3);
     printList();
-    printf("%d\n",15);
     
     free(m4);
     printList();
-    printf("%d\n",16);
+    
+    //Edgecase  size is bigger than size (1024 * 1024) in this case
+    char* edgeCasePtr = malloc(1024 * 1024 +1);
+	printList();
+	
+	free(edgeCasePtr);
+	printList();
+	
     
 
     exit(EXIT_SUCCESS);
