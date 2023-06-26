@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <errno.h>
+#include <pthread.h>
+#include <string.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "sem.h"
 
 struct statistics {
 	int lines;
@@ -17,6 +23,10 @@ struct statistics {
 // (module-)global variables
 static struct statistics stats;
 // TODO: add variables if necessary
+static SEM* sem;
+static SEM* grepSem;
+//static int MAX_LINE = 4096;
+static char** trees;
 
 // function declarations
 static void* processTree(void* path);
@@ -62,9 +72,46 @@ int main(int argc, char** argv) {
 	}
 
 	// TODO: implement me!
+	
+	//init semaphore for critical sections
+	sem = semCreate(1);
+	grepSem = semCreate(stats.maxGrepThreads);
+	if(sem == NULL || grepSem == NULL)
+		die("semCreate() failed");
+	
+	
+	//init tree array and fill it
+	int noOfTrees = argc - 3;
+	trees = malloc(noOfTrees * sizeof(char*));
+	for(int i = 0; i < noOfTrees; i++){
+			trees[i] = argv[i + 3];
+	}
+	
+	for (int i = 0; i < noOfTrees; i++) {
+		printf("Processing Tree (%d) %s\n",i, trees[i]);
+    }
+	
+	//create a pthread for each tree
+	pthread_t crawlThreads[noOfTrees];
+	
 
+	//start a thread for each tree
+	for(int i = 0; i < noOfTrees; i++){
+		// increase number of active crawlthreads
+		P(sem);
+		stats.activeCrawlThreads += 1;
+		V(sem);
+		pthread_create(&crawlThreads[i], NULL, processTree, (void*) trees[i]);
+	}
+	
+	//wait for all threads to finish	
+	while(1){if(stats.activeGrepThreads> stats.maxGrepThreads) printf("ALERT:  TOO MANY GREPS\n");}
+	
+	
+	free(trees);
 	return EXIT_SUCCESS;
 }
+
 
 /**
  * \brief Acts as start_routine for crawl-Threads and calls processDir().
@@ -78,6 +125,12 @@ int main(int argc, char** argv) {
 static void* processTree(void* path) {
 	//TODO: implement me!
 	
+	//detach thread
+	pthread_detach(pthread_self());
+	
+	printf("Thread on Path: %s\n",(char*)path);
+	
+	processDir((char*) path);
 	return NULL;
 }
 
@@ -92,7 +145,50 @@ static void* processTree(void* path) {
 
 static void processDir(char* path) {
 	// TODO: implement me!
+	//printf("Now processingDir at %s\n",path);
+	//open current directory
+	DIR* dir = opendir(path);
+	if(dir == NULL)
+		die("opendir");
+		
+	//init dirent and stat buffer
+	struct dirent* entry = NULL;
+	
+	//reset errno for readdir
+	errno = 0;
+	entry = readdir(dir);
+	
+	while(entry != NULL){
+		//reset errno for readdir
+		errno = 0;
 
+			
+		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+			//skip . and .. directories
+			entry = readdir(dir);
+			continue;
+		}
+		
+		// if its an entry process it
+		char newPath[256];
+		strcpy(newPath, path);
+		strcat(newPath, "/");
+		strcat(newPath, entry->d_name);
+		
+		//printf("Processing entry at path %s\n",newPath);
+		processEntry(newPath, entry);
+		entry = readdir(dir);
+
+	}
+	if(errno)
+		die("readdir");
+	
+	
+	
+	//decrease number of crawl threads before finishing
+	P(sem);
+	stats.activeCrawlThreads -= 1;
+	V(sem);
 }
 
 /**
@@ -107,6 +203,45 @@ static void processDir(char* path) {
  */
 static void processEntry(char* path, struct dirent* entry) {
 	//TODO: implement me!
+	struct stat buf;
+	if(lstat(path, &buf) == -1){
+		die("lstat");
+	}
+	
+	if(S_ISDIR(buf.st_mode)){
+		// is a directory
+		printf("Found DIRECTORY: %s in %s\n",entry->d_name, path);
+		//increase number of processed dirs
+		P(sem);
+		stats.dirs += 1;
+		V(sem);
+		
+		//process given directory
+		processDir(path);
+		
+		
+	} else if(S_ISREG(buf.st_mode)){
+		// is a regular file
+		printf("Found REGFILE: %s in %s\n",entry->d_name, path);
+		
+		
+		//wait for creation of new grepThread
+		while(stats.activeGrepThreads >= stats.maxGrepThreads){
+
+		}
+		//adjust number of grepthreads
+		P(sem);
+		stats.activeGrepThreads += 1;
+		V(sem);
+		
+		//create grepThread and sav
+		printf("	Creating a grepThread for %s\n",path);
+		P(grepSem);
+		char* p = strdup(path);
+		pthread_t grepThread;
+		pthread_create(&grepThread, NULL, processFile, (void*) p);	
+	}
+	
 
 }
 
@@ -121,9 +256,24 @@ static void processEntry(char* path, struct dirent* entry) {
  *
  * \return Always returns NULL
  */
-static void* processFile(void* path) {
+static void* processFile(void* p) {
 	//TODO: implement me!
-
+	char* path = (char*) p;
+	//increase number of searched files
+	P(sem);
+	stats.files += 1;
+	V(sem);
+	printf("	Thread (%ld) processes %s\n", pthread_self(),path);
+	
+	printf("	Thread (%ld) finished %s\n", pthread_self(),path);
+	free(path);
+	//adjust number of grepThreads;
+	P(sem);
+	stats.activeGrepThreads -= 1;
+	V(sem);
+	
+	//decrease number of grepThreads
+	V(grepSem);
 	return NULL;
 }
 
