@@ -25,8 +25,10 @@ static struct statistics stats;
 // TODO: add variables if necessary
 static SEM* sem;
 static SEM* grepSem;
+static SEM* dataSem;
 //static int MAX_LINE = 4096;
 static char** trees;
+static int hasChanged = 0;
 
 // function declarations
 static void* processTree(void* path);
@@ -76,7 +78,8 @@ int main(int argc, char** argv) {
 	//init semaphore for critical sections
 	sem = semCreate(1);
 	grepSem = semCreate(stats.maxGrepThreads);
-	if(sem == NULL || grepSem == NULL)
+	dataSem = semCreate(1);
+	if(sem == NULL || grepSem == NULL || dataSem == NULL)
 		die("semCreate() failed");
 	
 	
@@ -105,7 +108,25 @@ int main(int argc, char** argv) {
 	}
 	
 	//wait for all threads to finish	
-	while(1){if(stats.activeGrepThreads> stats.maxGrepThreads) printf("ALERT:  TOO MANY GREPS\n");}
+	while(1){
+		if(stats.activeGrepThreads > stats.maxGrepThreads) printf("ALERT:  TOO MANY GREPS\n");
+		
+		//if stats has been changed then print statistics
+		if(hasChanged){
+			P(sem);
+			hasChanged = 0;
+			V(sem);
+			
+			printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads);
+			P(sem);
+			if(stats.activeCrawlThreads <= 0 && stats.activeGrepThreads <= 0){
+				V(sem);
+				printf("Every Thread has finished.  Programm will now end.\n");
+				break;
+			}
+			V(sem);		
+		}
+	}
 	
 	
 	free(trees);
@@ -131,6 +152,13 @@ static void* processTree(void* path) {
 	printf("Thread on Path: %s\n",(char*)path);
 	
 	processDir((char*) path);
+	
+	//decrease number of crawl threads before finishing
+	P(sem);
+	hasChanged = 1;
+	stats.activeCrawlThreads -= 1;
+	V(sem);
+	
 	return NULL;
 }
 
@@ -146,6 +174,7 @@ static void* processTree(void* path) {
 static void processDir(char* path) {
 	// TODO: implement me!
 	//printf("Now processingDir at %s\n",path);
+	
 	//open current directory
 	DIR* dir = opendir(path);
 	if(dir == NULL)
@@ -183,12 +212,6 @@ static void processDir(char* path) {
 	if(errno)
 		die("readdir");
 	
-	
-	
-	//decrease number of crawl threads before finishing
-	P(sem);
-	stats.activeCrawlThreads -= 1;
-	V(sem);
 }
 
 /**
@@ -213,6 +236,7 @@ static void processEntry(char* path, struct dirent* entry) {
 		printf("Found DIRECTORY: %s in %s\n",entry->d_name, path);
 		//increase number of processed dirs
 		P(sem);
+		hasChanged = 1;
 		stats.dirs += 1;
 		V(sem);
 		
@@ -231,6 +255,7 @@ static void processEntry(char* path, struct dirent* entry) {
 		P(grepSem);
 		//adjust number of grepthreads
 		P(sem);
+		hasChanged = 1;
 		stats.activeGrepThreads += 1;
 		V(sem);
 		char* p = strdup(path);
@@ -254,17 +279,23 @@ static void processEntry(char* path, struct dirent* entry) {
  */
 static void* processFile(void* p) {
 	//TODO: implement me!
+	pthread_detach(pthread_self());
+	
 	char* path = (char*) p;
 	//increase number of searched files
 	P(sem);
+	hasChanged = 1;
 	stats.files += 1;
 	V(sem);
 	printf("		Thread (%ld) processes %s\n", pthread_self(),path);
+	
+	//TODO process file here and count lines etc
 	
 	printf("		Thread (%ld) finished %s\n", pthread_self(),path);
 	free(path);
 	//adjust number of grepThreads;
 	P(sem);
+	hasChanged = 1;
 	stats.activeGrepThreads -= 1;
 	V(sem);
 	
