@@ -225,18 +225,14 @@ static void processEntry(char* path, struct dirent* entry) {
 		printf("Found REGFILE: %s in %s\n",entry->d_name, path);
 		
 		
-		//wait for creation of new grepThread
-		while(stats.activeGrepThreads >= stats.maxGrepThreads){
-
-		}
+		
+		//create grepThread
+		printf("	Creating a grepThread for %s\n",path);
+		P(grepSem);
 		//adjust number of grepthreads
 		P(sem);
 		stats.activeGrepThreads += 1;
 		V(sem);
-		
-		//create grepThread and sav
-		printf("	Creating a grepThread for %s\n",path);
-		P(grepSem);
 		char* p = strdup(path);
 		pthread_t grepThread;
 		pthread_create(&grepThread, NULL, processFile, (void*) p);	
@@ -263,9 +259,9 @@ static void* processFile(void* p) {
 	P(sem);
 	stats.files += 1;
 	V(sem);
-	printf("	Thread (%ld) processes %s\n", pthread_self(),path);
+	printf("		Thread (%ld) processes %s\n", pthread_self(),path);
 	
-	printf("	Thread (%ld) finished %s\n", pthread_self(),path);
+	printf("		Thread (%ld) finished %s\n", pthread_self(),path);
 	free(path);
 	//adjust number of grepThreads;
 	P(sem);
