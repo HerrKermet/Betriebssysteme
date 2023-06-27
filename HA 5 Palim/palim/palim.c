@@ -29,7 +29,7 @@ static SEM* dataSem;
 //static int MAX_LINE = 4096;
 static char** trees;
 static int hasChanged = 0;
-
+static char stringToSearch[4097];
 // function declarations
 static void* processTree(void* path);
 static void processDir(char* path);
@@ -82,7 +82,8 @@ int main(int argc, char** argv) {
 	if(sem == NULL || grepSem == NULL || dataSem == NULL)
 		die("semCreate() failed");
 	
-	
+	// get the requested string to search
+	strcpy(stringToSearch, argv[1]);
 	//init tree array and fill it
 	int noOfTrees = argc - 3;
 	trees = malloc(noOfTrees * sizeof(char*));
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
 			hasChanged = 0;
 			V(sem);
 			
-			printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads);
+			printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\nLineHits: %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads, stats.lineHits);
 			P(sem);
 			if(stats.activeCrawlThreads <= 0 && stats.activeGrepThreads <= 0){
 				V(sem);
@@ -290,6 +291,22 @@ static void* processFile(void* p) {
 	printf("		Thread (%ld) processes %s\n", pthread_self(),path);
 	
 	//TODO process file here and count lines etc
+	FILE* file = fopen(path,"r");
+	if(file == NULL)
+		die("fopen");
+	
+	char line[4097]; // 4096 for max line and and another one for \0
+	
+	while(fgets(line, 4096, file) != NULL){
+		if(strstr(line, stringToSearch) != NULL){
+			//line contained the string
+			P(sem);
+			stats.lineHits += 1;
+			V(sem);
+			printf("%s\n",line);
+		}
+	}
+	fclose(file);
 	
 	printf("		Thread (%ld) finished %s\n", pthread_self(),path);
 	free(path);
