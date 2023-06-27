@@ -91,9 +91,9 @@ int main(int argc, char** argv) {
 			trees[i] = argv[i + 3];
 	}
 	
-	for (int i = 0; i < noOfTrees; i++) {
-		printf("Processing Tree (%d) %s\n",i, trees[i]);
-    }
+	//for (int i = 0; i < noOfTrees; i++) {
+		//printf("Processing Tree (%d) %s\n",i, trees[i]);
+    //}
 	
 	//create a pthread for each tree
 	pthread_t crawlThreads[noOfTrees];
@@ -118,11 +118,12 @@ int main(int argc, char** argv) {
 			hasChanged = 0;
 			V(sem);
 			
-			printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\nLineHits: %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads, stats.lineHits);
+			//printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\nLineHits: %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads, stats.lineHits);
+			printf("%d/%d lines, %d/%d files, %d directories, %d active threads\n", stats.lineHits, stats.lines, stats.fileHits, stats.files, stats.dirs, stats.activeGrepThreads);
 			P(sem);
 			if(stats.activeCrawlThreads <= 0 && stats.activeGrepThreads <= 0){
 				V(sem);
-				printf("Every Thread has finished.  Programm will now end.\n");
+				//printf("Every Thread has finished.  Programm will now end.\n");
 				break;
 			}
 			V(sem);		
@@ -150,7 +151,8 @@ static void* processTree(void* path) {
 	//detach thread
 	pthread_detach(pthread_self());
 	
-	printf("Thread on Path: %s\n",(char*)path);
+	//printf("Thread on Path: %s\n",(char*)path);
+	
 	
 	processDir((char*) path);
 	
@@ -180,6 +182,12 @@ static void processDir(char* path) {
 	DIR* dir = opendir(path);
 	if(dir == NULL)
 		die("opendir");
+	P(sem);
+	if(stats.dirs == 0){
+		//main "root" dir wasnt counted yet so we count it here
+		stats.dirs += 1;
+	}
+	V(sem);
 		
 	//init dirent and stat buffer
 	struct dirent* entry = NULL;
@@ -233,8 +241,8 @@ static void processEntry(char* path, struct dirent* entry) {
 	}
 	
 	if(S_ISDIR(buf.st_mode)){
-		// is a directory
-		printf("Found DIRECTORY: %s in %s\n",entry->d_name, path);
+		//is a directory
+		//printf("Found DIRECTORY: %s in %s\n",entry->d_name, path);
 		//increase number of processed dirs
 		P(sem);
 		hasChanged = 1;
@@ -247,12 +255,12 @@ static void processEntry(char* path, struct dirent* entry) {
 		
 	} else if(S_ISREG(buf.st_mode)){
 		// is a regular file
-		printf("Found REGFILE: %s in %s\n",entry->d_name, path);
+		//printf("Found REGFILE: %s in %s\n",entry->d_name, path);
 		
 		
 		
 		//create grepThread
-		printf("	Creating a grepThread for %s\n",path);
+		//printf("	Creating a grepThread for %s\n",path);
 		P(grepSem);
 		//adjust number of grepthreads
 		P(sem);
@@ -288,7 +296,7 @@ static void* processFile(void* p) {
 	hasChanged = 1;
 	stats.files += 1;
 	V(sem);
-	printf("		Thread (%ld) processes %s\n", pthread_self(),path);
+	//printf("		Thread (%ld) processes %s\n", pthread_self(),path);
 	
 	//TODO process file here and count lines etc
 	FILE* file = fopen(path,"r");
@@ -297,18 +305,29 @@ static void* processFile(void* p) {
 	
 	char line[4097]; // 4096 for max line and and another one for \0
 	
+	int hasFileHit = 0;
+	
 	while(fgets(line, 4096, file) != NULL){
+		//increase line count
+		P(sem);
+		stats.lines += 1;
+		V(sem);
 		if(strstr(line, stringToSearch) != NULL){
 			//line contained the string
 			P(sem);
 			stats.lineHits += 1;
+			//if file was not counted yet, then count it
+			if(!hasFileHit){
+				stats.fileHits += 1;
+				hasFileHit = 1;
+			}
 			V(sem);
-			printf("%s\n",line);
+			//printf("%s\n",line);
 		}
 	}
 	fclose(file);
 	
-	printf("		Thread (%ld) finished %s\n", pthread_self(),path);
+	//printf("		Thread (%ld) finished %s\n", pthread_self(),path);
 	free(path);
 	//adjust number of grepThreads;
 	P(sem);
