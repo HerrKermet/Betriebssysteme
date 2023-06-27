@@ -119,7 +119,9 @@ int main(int argc, char** argv) {
 			V(sem);
 			
 			//printf("##########\nDirs : %d\nFiles: %d\nCrawl: %d\nGrep : %d\nLineHits: %d\n##########\n",stats.dirs, stats.files, stats.activeCrawlThreads, stats.activeGrepThreads, stats.lineHits);
-			printf("%d/%d lines, %d/%d files, %d directories, %d active threads\n", stats.lineHits, stats.lines, stats.fileHits, stats.files, stats.dirs, stats.activeGrepThreads);
+
+			printf("\r%d/%d lines, %d/%d files, %d directories, %d active threads", stats.lineHits, stats.lines, stats.fileHits, stats.files, stats.dirs, stats.activeGrepThreads);
+			fflush(stdout);
 			P(sem);
 			if(stats.activeCrawlThreads <= 0 && stats.activeGrepThreads <= 0){
 				V(sem);
@@ -132,6 +134,7 @@ int main(int argc, char** argv) {
 	
 	
 	free(trees);
+	printf("\n");
 	return EXIT_SUCCESS;
 }
 
