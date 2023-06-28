@@ -26,10 +26,14 @@ static struct statistics stats;
 static SEM* sem;
 static SEM* grepSem;
 static SEM* dataSem;
-//static int MAX_LINE = 4096;
+
+
 static char** trees;
 static int hasChanged = 0;
 static char stringToSearch[4097];
+static char** PathsToGrep;
+static int storedPaths = 0;
+static int possibleStorage = 1;
 // function declarations
 static void* processTree(void* path);
 static void processDir(char* path);
@@ -46,6 +50,56 @@ static void die(const char *msg) {
 	perror(msg);
 	exit(EXIT_FAILURE);
 }
+
+//functions for the passive waiting of the grepthreads
+
+//adds given path to end of stack
+static void insertString(char* str){
+	if(storedPaths >= possibleStorage){
+		//allocate more memory for the paths
+		possibleStorage *= 2;
+		PathsToGrep = realloc(PathsToGrep, possibleStorage * sizeof(char*));
+		if(PathsToGrep == NULL)
+			die("malloc");
+	}
+	else if(storedPaths < possibleStorage / 2){
+		possibleStorage /= 2;
+		PathsToGrep = realloc(PathsToGrep, possibleStorage * sizeof(char*));
+		if(PathsToGrep == NULL)
+			die("malloc");		
+	}
+		
+		PathsToGrep[storedPaths] = strdup(str);
+		if(PathsToGrep[storedPaths] == NULL)
+			die("strdup");
+		storedPaths++;
+}
+//returns path to string or null if its empty
+static char* popString(){
+	if(storedPaths == 0)
+		return NULL;
+	char* toReturn = strdup(PathsToGrep[storedPaths - 1]);
+	free(PathsToGrep[storedPaths]);
+	storedPaths--;
+	
+	if(storedPaths < possibleStorage / 2){
+		possibleStorage /= 2;
+		PathsToGrep = realloc(PathsToGrep, possibleStorage * sizeof(char*));
+		if(PathsToGrep == NULL)
+			die("malloc");		
+	}
+	return toReturn;
+	
+}
+
+//frees the path stack
+static void freePathStorage(){
+		for(int i = 0; i < storedPaths; i++){
+		free(PathsToGrep[i]);
+	}
+	free(PathsToGrep);
+}
+
 
 /**
  * \brief Initializes necessary data structures and spawns one crawl-Thread per tree.
@@ -81,6 +135,9 @@ int main(int argc, char** argv) {
 	dataSem = semCreate(1);
 	if(sem == NULL || grepSem == NULL || dataSem == NULL)
 		die("semCreate() failed");
+		
+	//Init path queue
+	PathsToGrep = malloc(sizeof(char*) * possibleStorage);
 	
 	// get the requested string to search
 	strcpy(stringToSearch, argv[1]);
@@ -109,9 +166,7 @@ int main(int argc, char** argv) {
 	}
 	
 	//wait for all threads to finish	
-	while(1){
-		if(stats.activeGrepThreads > stats.maxGrepThreads) printf("ALERT:  TOO MANY GREPS\n");
-		
+	while(1){		
 		//if stats has been changed then print statistics
 		if(hasChanged){
 			P(sem);
@@ -133,7 +188,9 @@ int main(int argc, char** argv) {
 	}
 	
 	
+	
 	free(trees);
+	freePathStorage();
 	printf("\n");
 	return EXIT_SUCCESS;
 }
@@ -259,22 +316,32 @@ static void processEntry(char* path, struct dirent* entry) {
 	} else if(S_ISREG(buf.st_mode)){
 		// is a regular file
 		//printf("Found REGFILE: %s in %s\n",entry->d_name, path);
-		
-		
-		
-		//create grepThread
-		//printf("	Creating a grepThread for %s\n",path);
-		P(grepSem);
-		//adjust number of grepthreads
 		P(sem);
-		hasChanged = 1;
-		stats.activeGrepThreads += 1;
+		if(stats.activeGrepThreads >= stats.maxGrepThreads){
+			//store path to array for later processing
+			char* newPath = strdup(path);
+			insertString(newPath);
+		}	
+		else {
+			//create grepThread
+			//printf("	Creating a grepThread for %s\n",path);
+			//adjust number of grepthreads
+			hasChanged = 1;
+			stats.activeGrepThreads += 1;
+			char* p = strdup(path);
+			pthread_t grepThread;
+			pthread_create(&grepThread, NULL, processFile, (void*) p);
+			
+			while(stats.activeGrepThreads < stats.maxGrepThreads && storedPaths > 0){
+				char* nextPath = popString();
+				stats.activeGrepThreads += 1;
+				pthread_t anotherGrepThread;
+				pthread_create(&anotherGrepThread, NULL, processFile, (void*) nextPath);
+			}
+				
+		}
 		V(sem);
-		char* p = strdup(path);
-		pthread_t grepThread;
-		pthread_create(&grepThread, NULL, processFile, (void*) p);	
 	}
-	
 
 }
 
@@ -310,7 +377,7 @@ static void* processFile(void* p) {
 	
 	int hasFileHit = 0;
 	
-	while(fgets(line, 4096, file) != NULL){
+	while(fgets(line, 4100, file) != NULL){
 		//increase line count
 		P(sem);
 		stats.lines += 1;
@@ -336,10 +403,17 @@ static void* processFile(void* p) {
 	P(sem);
 	hasChanged = 1;
 	stats.activeGrepThreads -= 1;
+	char* nextPath = popString();
+	if(nextPath)
+	{
+		//we pop the next file to process and start a thread
+		stats.activeGrepThreads += 1;
+		pthread_t newGrepThread;
+		pthread_create(&newGrepThread, NULL, processFile, (void*) nextPath);
+	}
 	V(sem);
 	
 	//decrease number of grepThreads
-	V(grepSem);
 	return NULL;
 }
 
