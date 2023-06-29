@@ -24,7 +24,6 @@ struct statistics {
 static struct statistics stats;
 // TODO: add variables if necessary
 static SEM* sem;
-static SEM* grepSem;
 static SEM* dataSem;
 
 
@@ -131,9 +130,8 @@ int main(int argc, char** argv) {
 	
 	//init semaphore for critical sections
 	sem = semCreate(1);
-	grepSem = semCreate(stats.maxGrepThreads);
 	dataSem = semCreate(1);
-	if(sem == NULL || grepSem == NULL || dataSem == NULL)
+	if(sem == NULL || dataSem == NULL)
 		die("semCreate() failed");
 		
 	//Init path queue
@@ -319,8 +317,10 @@ static void processEntry(char* path, struct dirent* entry) {
 		P(sem);
 		if(stats.activeGrepThreads >= stats.maxGrepThreads){
 			//store path to array for later processing
+			P(dataSem);
 			char* newPath = strdup(path);
 			insertString(newPath);
+			V(dataSem);
 		}	
 		else {
 			//create grepThread
@@ -333,10 +333,12 @@ static void processEntry(char* path, struct dirent* entry) {
 			pthread_create(&grepThread, NULL, processFile, (void*) p);
 			
 			while(stats.activeGrepThreads < stats.maxGrepThreads && storedPaths > 0){
+				P(dataSem);
 				char* nextPath = popString();
 				stats.activeGrepThreads += 1;
 				pthread_t anotherGrepThread;
 				pthread_create(&anotherGrepThread, NULL, processFile, (void*) nextPath);
+				V(dataSem);
 			}
 				
 		}
@@ -403,7 +405,9 @@ static void* processFile(void* p) {
 	P(sem);
 	hasChanged = 1;
 	stats.activeGrepThreads -= 1;
+	P(dataSem);
 	char* nextPath = popString();
+	V(dataSem);
 	if(nextPath)
 	{
 		//we pop the next file to process and start a thread
